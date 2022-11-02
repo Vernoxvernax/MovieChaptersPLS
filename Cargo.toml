@@ -1,0 +1,9 @@
+[package]
+name = "chapterpls"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.0.18", features = ["derive"] }
+ffmpeg-next = "5.1.1"
+quick-xml = "0.26.0"
