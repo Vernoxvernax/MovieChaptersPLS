@@ -135,33 +135,25 @@ fn split_chapters(payload: Vec<XMLChapter>, files: Vec<String>) -> Vec<M2ts> {
     let mut payload_mut = payload;
     let mut m2tss = vec![];
     for file in files {
-        let mut fmt_duration: String = "".to_string();
+        let mut seconds: u64 = 0;
         match ffmpeg_next::format::input(&file) {
             Ok(context) => {
                 let duration =  context.duration() as f64 / f64::from(ffmpeg_next::ffi::AV_TIME_BASE);
-                let seconds: u64;
                 let second_str = duration.to_string();
                 if second_str.contains(".") {
                     let split_str: Vec<String> = second_str.split(".").map(|s| s.to_string()).collect();
                     seconds = split_str.get(0).unwrap().parse::<u64>().unwrap();
-                    let obj = Duration::new(seconds, 0);
-                    fmt_duration = format!("{:02}:{:02}:{:02}", (((obj.as_secs() / 60) / 60)), ((obj.as_secs() / 60) %60), obj.as_secs() % 60);
                 } else {
-                    let seconds = format!("{}", duration).parse::<u64>().unwrap();
-                    let obj = Duration::new(seconds, 0);
-                    fmt_duration = format!("{:02}:{:02}:{:02}", (((obj.as_secs() / 60) / 60)), ((obj.as_secs() / 60) %60), obj.as_secs() % 60);
+                    seconds = format!("{}", duration).parse::<u64>().unwrap();
                 }
             },
             Err(error) => println!("error: {}", error),
         };
-        let search: Option<usize> = payload_mut.iter().position(|ch| ch.start.as_ref().unwrap().starts_with(&fmt_duration));
-        if search.is_none() {
-            println!("Failed to map chapters accurately. Sorry");
-            return vec![];
-        }
-        let last_chapter = payload_mut.get(search.unwrap()).unwrap().clone();
+
+        let search: usize = closest_chapter(payload_mut.clone(), seconds as f64);
+        let last_chapter = payload_mut.get(search).unwrap().clone();
         let mut chapters: Vec<XMLChapter> = vec![];
-        for _index in 0..search.unwrap()+1 {
+        for _index in 0..search+1 {
             chapters.append(&mut vec![payload_mut.get(0).unwrap().clone()]);
             payload_mut.remove(0);
         };
@@ -183,30 +175,47 @@ fn split_chapters(payload: Vec<XMLChapter>, files: Vec<String>) -> Vec<M2ts> {
 }
 
 
-fn substract_time(ch1: XMLChapter, ch2: XMLChapter) -> XMLChapter {
-    fn convert_to_seconds(time: &String, time2: &String) -> (u64, String) {
-        fn floating(time: &String) -> f64 {
-            let start: Vec<&str> = time.split(":").collect();
-            let hour = start.get(0).unwrap().parse::<f64>().unwrap();
-            let minute = start.get(1).unwrap().parse::<f64>().unwrap();
-            let second = start.get(2).unwrap().parse::<f64>().unwrap();
-            hour*60.0*60.0+minute*60.0+second
+fn closest_chapter(payload: Vec<XMLChapter>, seconds: f64) -> usize {
+    let mut last: usize = 0;
+    for (index, chapter) in payload.iter().enumerate() {
+        last = index;
+        let ch = floating(&chapter.start.clone().unwrap()).floor();
+        if seconds == ch {
+            return index;
         }
-        let difference = (floating(time)-floating(time2)).to_string();
-        let difference_str: Vec<&str> = difference.split(".").collect();
-        let mut nanos = format!("{}", difference_str.get(1).unwrap());
-        if nanos.len() > 9 {
-            for _x in 0..nanos.len()-9 {
-                nanos.pop();
-            }
-        }
-        if nanos.len() < 9 {
-            for _x in 0..9-nanos.len() {
-                nanos.push_str("0")
-            }
-        }
-        (difference_str.get(0).unwrap().parse::<u64>().unwrap(), nanos)
     }
+    last
+}
+
+
+fn floating(time: &String) -> f64 {
+    let start: Vec<&str> = time.split(":").collect();
+    let hour = start.get(0).unwrap().parse::<f64>().unwrap();
+    let minute = start.get(1).unwrap().parse::<f64>().unwrap();
+    let second = start.get(2).unwrap().parse::<f64>().unwrap();
+    hour*60.0*60.0+minute*60.0+second
+}
+
+
+fn convert_to_seconds(time: &String, time2: &String) -> (u64, String) {
+    let difference = (floating(time)-floating(time2)).to_string();
+    let difference_str: Vec<&str> = difference.split(".").collect();
+    let mut nanos = format!("{}", difference_str.get(1).unwrap());
+    if nanos.len() > 9 {
+        for _x in 0..nanos.len()-9 {
+            nanos.pop();
+        }
+    }
+    if nanos.len() < 9 {
+        for _x in 0..9-nanos.len() {
+            nanos.push_str("0")
+        }
+    }
+    (difference_str.get(0).unwrap().parse::<u64>().unwrap(), nanos)
+}
+
+
+fn substract_time(ch1: XMLChapter, ch2: XMLChapter) -> XMLChapter {
     let start_time_str = convert_to_seconds(ch1.start.as_ref().unwrap(), ch2.start.as_ref().unwrap());
     let obj = Duration::new(start_time_str.0, start_time_str.1.parse::<u32>().unwrap());
     let start_time = Some(
