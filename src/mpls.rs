@@ -26,7 +26,7 @@ pub fn serialize(path: &String) -> Vec<M2ts>
   let type_ind1 = String::from_utf8_lossy(&buf[0..4]).to_string();
   let type_ind2 = String::from_utf8_lossy(&buf[4..8]).to_string();
   if type_ind1 != String::from("MPLS") || ! "0100 0200 0300".contains(type_ind2.as_str()) {
-    eprintln!("Not a valid mpls chapter file.")
+    eprintln!("This is not a valid mpls playlist file.")
   }
 
   let mut bc = &buf[8..];
@@ -106,15 +106,15 @@ pub fn serialize(path: &String) -> Vec<M2ts>
 
   // Processing the data we've found using structs and vectors.
   let mut m2ts: Vec<M2ts> = vec![];
-  for m in media
+  for (nr, m) in media.iter().enumerate()
   {
     let play_item_marks = marks.clone().into_iter()
-    .filter(|x| x.0 == 1 && x.1 == m.0)
+    .filter(|x| x.0 == 1 && x.1 as usize == nr)
     .collect::<Vec<_>>();
     if play_item_marks.is_empty()
     {
       println!("No chapters have been found \"{:05}.{}\".", m.0, m.1.to_lowercase());
-      break;
+      continue;
     }
 
     let mut offset = play_item_marks.get(0).unwrap().2;
@@ -148,10 +148,17 @@ pub fn serialize(path: &String) -> Vec<M2ts>
         start: start_time
       }])
     }
-    m2ts.append(&mut vec![M2ts{
-      path: format!("{:05}.{}", m.0, m.1.to_lowercase()),
-      chapters
-    }])
+    if chapters.len() != 1 && chapters.get(0).unwrap().start != "00:00:00.00"
+    {
+      m2ts.append(&mut vec![M2ts{
+        path: format!("{:05}.{}", m.0, m.1.to_lowercase()),
+        chapters
+      }])
+    }
+    else
+    {
+      println!("No chapters have been found \"{:05}.{}\".", m.0, m.1.to_lowercase());
+    }
   }
   m2ts
 }
