@@ -17,8 +17,6 @@ This script reads the binary data from your `.mpls` file and creates `FFmetadata
 
 * Chapter names are numbered like so: `Chapter 1`.
 
-* Blu-ray chapters don't end. They only specify a starting point, which isn't a problem for media players.
-
 * A few test have shown that the calculations, which are done by the script, indeed frame-precise are.
 
 ___

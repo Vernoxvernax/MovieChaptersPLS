@@ -12,6 +12,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct XMLChapter {
   title: String,
   start: String,
+  end: String,
 }
 
 #[derive(Debug, Clone)]
@@ -45,7 +46,7 @@ fn main () {
 
       if ! Path::new(file).is_file()
       {
-        eprintln!("\"{}\" does not exist.", file);
+        eprintln!("\"{file}\" does not exist.");
         return;
       }
 
@@ -59,10 +60,10 @@ fn main () {
 
 fn write_ffmetadata(files: Vec<M2ts>) {
   fn str_to_time(start: String) -> String {
-    let start_str: Vec<&str> = start.split(":").collect();
+    let start_str: Vec<&str> = start.split(':').collect();
     let hours = start_str.get(0).unwrap().parse::<u64>().unwrap() * 60 * 60;
     let minutes = start_str.get(1).unwrap().parse::<u64>().unwrap() * 60;
-    let start_str_2: Vec<&str> = start_str.get(2).unwrap().split(".").collect();
+    let start_str_2: Vec<&str> = start_str.get(2).unwrap().split('.').collect();
     let seconds = start_str_2.get(0).unwrap().parse::<u64>().unwrap();
     let mut ms_str = start_str_2.get(1).unwrap().to_owned().to_owned();
     loop {
@@ -77,12 +78,12 @@ fn write_ffmetadata(files: Vec<M2ts>) {
   for file in files {
     let mut output: String = ";FFMETADATA1\n".to_string();
     for chapter in file.chapters {
-      output = output + "\n[CHAPTER]\nTIMEBASE=1/1000";
-      output = output + "\nSTART=" + format!("{}", str_to_time(chapter.start.clone())).as_str();
-      output = output + "\nEND=" + format!("{}", str_to_time(chapter.start.clone())).as_str();
+      output += "\n[CHAPTER]\nTIMEBASE=1/1000";
+      output = output + "\nSTART=" + str_to_time(chapter.start.clone()).to_string().as_str();
+      output = output + "\nEND=" + str_to_time(chapter.end.clone().to_string()).as_str();
       output = output + "\ntitle=" + &chapter.title;
     }
     let mut file = File::create(file.path+".ff").unwrap();
-    writeln!(&mut file, "{}", output).unwrap();
+    writeln!(&mut file, "{output}").unwrap();
   }
 }
