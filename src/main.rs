@@ -2,6 +2,7 @@ use clap::{Arg, Command, ArgAction};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use rand::Rng;
 
 mod mpls;
 use mpls::serialize;
@@ -21,7 +22,6 @@ pub struct M2ts {
   chapters: Vec<XMLChapter>
 }
 
-
 fn main () {
   let matches = Command::new("moviechapterspls")
     .about("read chapters from mpls and export them as ffmetadata")
@@ -35,10 +35,19 @@ fn main () {
       .action(ArgAction::Set)
       .num_args(1)
     )
+    .arg(
+      Arg::new("XML")
+      .short('x')
+      .help("Output as XML instead of ffmetadata")
+      .required(false)
+      .action(ArgAction::SetTrue)
+    )
   .get_matches();
   match matches.args_present() {
     true => {
       let file = matches.get_one::<String>("00000.mpls").unwrap();
+      let xml: bool = *matches.get_one::<bool>("XML").unwrap();
+
       if ! file.ends_with(".mpls") {
         eprintln!("The chapter file must have the extension \".mpls\"!");
         return;
@@ -51,14 +60,13 @@ fn main () {
       }
 
       let m2ts = serialize(file);
-      write_ffmetadata(m2ts);
+      write_chapters(m2ts, xml);
     }
     _ => unreachable!(),
   }
 }
 
-
-fn write_ffmetadata(files: Vec<M2ts>) {
+fn write_chapters(files: Vec<M2ts>, xml: bool) {
   fn str_to_time(start: String) -> String {
     let start_str: Vec<&str> = start.split(':').collect();
     let hours = start_str.get(0).unwrap().parse::<u64>().unwrap() * 60 * 60;
@@ -66,6 +74,7 @@ fn write_ffmetadata(files: Vec<M2ts>) {
     let start_str_2: Vec<&str> = start_str.get(2).unwrap().split('.').collect();
     let seconds = start_str_2.get(0).unwrap().parse::<u64>().unwrap();
     let mut ms_str = start_str_2.get(1).unwrap().to_owned().to_owned();
+
     loop {
       if ms_str.len() > 3 {
         ms_str.pop();
@@ -73,17 +82,47 @@ fn write_ffmetadata(files: Vec<M2ts>) {
         break
       }
     }
+
     format!("{}{}", hours + minutes + seconds, ms_str)
   }
-  for file in files {
-    let mut output: String = ";FFMETADATA1\n".to_string();
-    for chapter in file.chapters {
-      output += "\n[CHAPTER]\nTIMEBASE=1/1000";
-      output = output + "\nSTART=" + str_to_time(chapter.start.clone()).to_string().as_str();
-      output = output + "\nEND=" + str_to_time(chapter.end.clone().to_string()).as_str();
-      output = output + "\ntitle=" + &chapter.title;
+
+  if xml {
+    for file in files {
+      let mut rng = rand::thread_rng();
+      let mut output: String = "<?xml version=\"1.0\"?>\n<!-- <!DOCTYPE Chapters SYSTEM \"matroskachapters.dtd\"> -->
+<Chapters>
+  <EditionEntry>\n".to_string();
+      output = output + "    <EditionUID>" + rng.gen::<u64>().to_string().as_str() + "</EditionUID>\n";
+
+      for chapter in file.chapters {
+        output += "    <ChapterAtom>\n";
+        output = output + "      <ChapterUID>" + rng.gen::<u64>().to_string().as_str() + "</ChapterUID>\n";
+        output = output + "      <ChapterTimeStart>" + &chapter.start + "</ChapterTimeStart>\n";
+        output = output + "      <ChapterTimeEnd>" + &chapter.end + "</ChapterTimeEnd>\n";
+        output = output + "      <ChapterDisplay>\n";
+        output = output + "        <ChapterString>" + &chapter.title + "</ChapterString>\n";
+        output = output + "      </ChapterDisplay>\n";
+        output += "    </ChapterAtom>\n";
+      }
+
+      output += "  </EditionEntry>\n</Chapters>\n";
+
+      let mut file = File::create(file.path+".xml").unwrap();
+      writeln!(&mut file, "{output}").unwrap();
     }
-    let mut file = File::create(file.path+".ff").unwrap();
-    writeln!(&mut file, "{output}").unwrap();
+  } else {
+    for file in files {
+      let mut output: String = ";FFMETADATA1\n".to_string();
+  
+      for chapter in file.chapters {
+        output += "\n[CHAPTER]\nTIMEBASE=1/1000";
+        output = output + "\nSTART=" + str_to_time(chapter.start.clone()).to_string().as_str();
+        output = output + "\nEND=" + str_to_time(chapter.end.clone().to_string()).as_str();
+        output = output + "\ntitle=" + &chapter.title;
+      }
+  
+      let mut file = File::create(file.path+".ff").unwrap();
+      writeln!(&mut file, "{output}").unwrap();
+    }
   }
 }

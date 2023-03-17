@@ -11,6 +11,8 @@ moviechapterspls 00000.mpls
 ffmpeg -i 00000.m2ts -i 00000.m2ts.ff -map 0:v -map_metadata 1 -c copy 00000.mkv
 ```
 
++ `-x` for XML chapters
+
 ___
 
 This script reads the binary data from your `.mpls` file and creates `FFmetadata` chapter files for every media file (e.g. `00000.m2ts`), that has at least one chapter assigned.

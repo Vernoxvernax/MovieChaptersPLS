@@ -154,7 +154,7 @@ pub fn serialize(path: &String) -> Vec<M2ts>
       {
         chapters.append(&mut vec![XMLChapter {
           title: format!("Chapter {n}"),
-          start: last_mark.clone(),
+          start: last_mark.trim().to_string().clone(),
           end: time.clone()
         }]);
       }
@@ -179,6 +179,7 @@ pub fn serialize(path: &String) -> Vec<M2ts>
       }
       last_mark = time;
     }
+
     if chapters.len() != 1 && chapters.get(0).unwrap().start != "00:00:00.00"
     {
       m2ts.append(&mut vec![M2ts{
