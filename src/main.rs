@@ -2,6 +2,7 @@ use clap::{Arg, Command, ArgAction};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::time::Duration;
 use rand::Rng;
 
 mod mpls;
@@ -14,17 +15,20 @@ pub struct XMLChapter {
   title: String,
   start: String,
   end: String,
+  start_duration: Duration,
+  end_duration: Duration
 }
 
 #[derive(Debug, Clone)]
 pub struct M2ts {
+  id: u16,
   path: String,
   chapters: Vec<XMLChapter>
 }
 
 fn main () {
   let matches = Command::new("moviechapterspls")
-    .about("read chapters from mpls and export them as ffmetadata")
+    .about("read chapters from mpls and export them")
     .version(VERSION)
     .arg_required_else_help(true)
     .author("Vernox Vernax")
@@ -42,11 +46,27 @@ fn main () {
       .required(false)
       .action(ArgAction::SetTrue)
     )
+    .arg(
+      Arg::new("merge")
+      .short('m')
+      .help("Merge chapters for <id> until <id> into one chapter file (last one must have chapters). This option will also mind chapters that make up the entirety of the file.")
+      .required(false)
+      .action(ArgAction::Set)
+      .num_args(2)
+    )
   .get_matches();
   match matches.args_present() {
     true => {
       let file = matches.get_one::<String>("00000.mpls").unwrap();
       let xml: bool = *matches.get_one::<bool>("XML").unwrap();
+      let merge: Vec<&String> = if let Some(ids) = matches.try_get_many::<String>("merge").unwrap()
+      {
+        ids.collect()
+      }
+      else
+      {
+        vec![]
+      };
 
       if ! file.ends_with(".mpls") {
         eprintln!("The chapter file must have the extension \".mpls\"!");
@@ -59,7 +79,7 @@ fn main () {
         return;
       }
 
-      let m2ts = serialize(file);
+      let m2ts = serialize(file, merge);
       write_chapters(m2ts, xml);
     }
     _ => unreachable!(),
@@ -99,9 +119,9 @@ fn write_chapters(files: Vec<M2ts>, xml: bool) {
         output = output + "      <ChapterUID>" + rng.gen::<u64>().to_string().as_str() + "</ChapterUID>\n";
         output = output + "      <ChapterTimeStart>" + &chapter.start + "</ChapterTimeStart>\n";
         output = output + "      <ChapterTimeEnd>" + &chapter.end + "</ChapterTimeEnd>\n";
-        output = output + "      <ChapterDisplay>\n";
+        output += "      <ChapterDisplay>\n";
         output = output + "        <ChapterString>" + &chapter.title + "</ChapterString>\n";
-        output = output + "      </ChapterDisplay>\n";
+        output += "      </ChapterDisplay>\n";
         output += "    </ChapterAtom>\n";
       }
 

@@ -1,9 +1,9 @@
 [package]
 name = "moviechapterspls"
-version = "0.1.10"
+version = "0.1.11"
 edition = "2021"
 
 [dependencies]
-clap = "4.1.9"
+clap = "4.2.4"
 rand = "0.8.5"
 byteorder = "1.4.3"

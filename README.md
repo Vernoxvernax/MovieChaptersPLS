@@ -13,6 +13,11 @@ ffmpeg -i 00000.m2ts -i 00000.m2ts.ff -map 0:v -map_metadata 1 -c copy 00000.mkv
 
 + `-x` for XML chapters
 
++ `--merge` to specify a range of m2ts ID's that will be used to create a merged chapter file
+  + `-m 0 2` -> chapters from 0000**0**.m2ts, 00001.m2ts and 0000**2**.m2ts appended to one XML file.
+  + Why: *Some Blu-rays split episodes into multiple files*
+  + This will only work if your last m2ts has at least one chapter.
+
 ___
 
 This script reads the binary data from your `.mpls` file and creates `FFmetadata` chapter files for every media file (e.g. `00000.m2ts`), that has at least one chapter assigned.
