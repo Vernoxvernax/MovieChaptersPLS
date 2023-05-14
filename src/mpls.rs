@@ -1,8 +1,7 @@
 use std::fs;
-use std::io::{Read};
-use std::io::Seek;
 use std::path::Path;
 use std::time::Duration;
+use std::io::{Read, Seek};
 use byteorder::{ReadBytesExt, BigEndian};
 
 use crate::M2ts;
@@ -14,7 +13,7 @@ use crate::XMLChapter;
   https://en.wikibooks.org/wiki/User:Bdinfo/mpls
 */
 
-pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
+pub fn serialize(path: &String, merge: Vec<&String>, only: Vec<&String>) -> Vec<M2ts>
 {
   let pathed_file = Path::new(&path);
   let mut file = fs::File::open(pathed_file).unwrap();
@@ -120,7 +119,7 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
       continue;
     }
 
-    let mut offset = play_item_marks.get(0).unwrap().2;
+    let mut offset = play_item_marks.first().unwrap().2;
     if m.2 < offset
     {
       offset = m.2
@@ -129,6 +128,7 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
     let mut chapters: Vec<XMLChapter> = vec![];
     let mut last_mark: String = String::new(); // So that we can set correct chapter start and end values
     let mut last_duration: Duration = Duration::new(0, 0);
+    let mut record: bool = false;
 
     for n in 0..play_item_marks.len()
     {
@@ -144,22 +144,49 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
       };
 
       let obj = Duration::new(time_mark_str.0, time_mark_str.1.parse::<u32>().unwrap());
-      let time = 
-        format!("{:02}:{:02}:{:02}.{:02}",
-        ((obj.as_secs() / 60) / 60),
-        ((obj.as_secs() / 60) % 60),
-        obj.as_secs() % 60,
-      time_mark_str.1);
+      let time = duration_to_string(obj);
 
       if n != 0
       {
-        chapters.append(&mut vec![XMLChapter {
-          title: format!("Chapter {n}"),
-          start: last_mark.trim().to_string().clone(),
-          end: time.clone(),
-          start_duration: last_duration,
-          end_duration: obj
-        }]);
+        if ! only.is_empty()
+        {
+          if only.get(1).unwrap().starts_with(&time)
+          {
+            let corrected_start = substract_str_time(last_mark.trim().to_string(), only.first().unwrap().to_string());
+            let corrected_end = substract_str_time(time.clone(), only.first().unwrap().to_string());
+            chapters.append(&mut vec![XMLChapter {
+              title: format!("Chapter {n}"),
+              start: corrected_start.0,
+              end: corrected_end.0,
+              start_duration: corrected_start.1,
+              end_duration: corrected_end.1
+            }]);
+            break;
+          }
+          else if last_mark.trim().to_string().starts_with(&only.first().unwrap().to_string()) || record
+          {
+            let corrected_start = substract_str_time(last_mark.trim().to_string(), only.first().unwrap().to_string());
+            let corrected_end = substract_str_time(time.clone(), only.first().unwrap().to_string());
+            record = true;
+            chapters.append(&mut vec![XMLChapter {
+              title: format!("Chapter {n}"),
+              start: corrected_start.0,
+              end: corrected_end.0,
+              start_duration: corrected_start.1,
+              end_duration: corrected_end.1
+            }]);
+          }
+        }
+        else
+        {
+          chapters.append(&mut vec![XMLChapter {
+            title: format!("Chapter {n}"),
+            start: last_mark.trim().to_string().clone(),
+            end: time.clone(),
+            start_duration: last_duration,
+            end_duration: obj
+          }]);
+        }
       }
       
       if n == play_item_marks.len() - 1
@@ -167,12 +194,26 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
         let end_mark = (m.3 - offset) as f32 / 45000.0;
         let end_time_mark_str = convert_to_seconds(&end_mark);
         let end_duration = Duration::new(end_time_mark_str.0, end_time_mark_str.1.parse::<u32>().unwrap());
-        let end_time = 
-          format!("{:02}:{:02}:{:02}.{:02}",
-          ((end_duration.as_secs() / 60) / 60),
-          ((end_duration.as_secs() / 60) %60),
-          end_duration.as_secs() % 60,
-        end_time_mark_str.1);
+        let end_time = duration_to_string(end_duration);
+
+        if ! only.is_empty() && only.first().unwrap().starts_with(&end_time.trim().to_string())
+        {
+          break;
+        }
+
+        if ! only.is_empty() && only.get(1).unwrap().starts_with(&time)
+        {
+          let corrected_start = substract_str_time(time.trim().to_string(), only.first().unwrap().to_string());
+          let corrected_end = substract_str_time(end_time.clone(), only.first().unwrap().to_string());
+          chapters.append(&mut vec![XMLChapter {
+            title: format!("Chapter {}", n+1),
+            start: corrected_start.0,
+            end: corrected_end.0,
+            start_duration: corrected_start.1,
+            end_duration: corrected_end.1
+          }]);
+          break;
+        }
 
         chapters.append(&mut vec![XMLChapter {
           title: format!("Chapter {}", n+1),
@@ -181,12 +222,14 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
           start_duration: obj,
           end_duration
         }]);
+
       }
       last_mark = time;
       last_duration = obj;
     }
 
-    if ((merge.is_empty() && chapters.len() != 1) || (!merge.is_empty() && !chapters.is_empty())) && chapters.get(0).unwrap().start != "00:00:00.00"
+    if ((merge.is_empty() && chapters.len() != 1) || (!merge.is_empty() && !chapters.is_empty()))
+    && chapters.get(0).unwrap().start != "00:00:00.00"
     {
       m2ts.append(&mut vec![M2ts{
         id: m.0,
@@ -230,21 +273,8 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
           let start = chapter.start_duration + last_end;
           end = chapter.end_duration + last_end;
 
-          let nanos = get_nanos(start);
-          let start_time = 
-            format!("{:02}:{:02}:{:02}.{}",
-            ((start.as_secs() / 60) / 60),
-            ((start.as_secs() / 60) % 60),
-            start.as_secs() % 60,
-          nanos);
-
-          let nanos = get_nanos(end);
-          let end_time = 
-            format!("{:02}:{:02}:{:02}.{:02}",
-            ((end.as_secs() / 60) / 60),
-            ((end.as_secs() / 60) % 60),
-            end.as_secs() % 60,
-          nanos);
+          let start_time = duration_to_string(start);
+          let end_time = duration_to_string(end);
           
           chapters.append(&mut vec![XMLChapter {
             title: format!("Chapter {}", n+1),
@@ -269,6 +299,44 @@ pub fn serialize(path: &String, merge: Vec<&String>) -> Vec<M2ts>
     }
     merged
   }
+}
+
+fn substract_str_time(time1: String, time2: String) -> (String, Duration)
+{
+  let time1_ = parse_timestamp_to_duration(time1);
+  let time2_ = parse_timestamp_to_duration(time2);
+  (duration_to_string(time1_ - time2_), time1_ - time2_)
+}
+
+fn parse_timestamp_to_duration(timestamp: String) -> Duration
+{
+  if timestamp == "0"
+  {
+    return Duration::new(0, 0);
+  }
+  let parts: Vec<&str> = timestamp.split('.').collect();
+  let secs_parts: Vec<&str> = parts[0].split(':').collect();
+  let secs: u64 = secs_parts[2].parse().unwrap();
+  let mins: u64 = secs_parts[1].parse().unwrap();
+  let hours: u64 = secs_parts[0].parse().unwrap();
+  let fractional_secs: f64 = format!("0.{}", parts[1]).parse().unwrap();
+  let fractional_secs_string = fractional_secs.to_string();
+  let fractional_secs_trim = fractional_secs_string.split(".").collect::<Vec<&str>>();
+  let zeros = 9 - fractional_secs_trim.get(1).unwrap_or(&"0").len();
+  let nanos: u32 = fractional_secs_trim.get(1).unwrap_or(&"0").parse::<u32>().unwrap() * (10_u32.pow(zeros as u32)) as u32;
+  let total_secs = hours * 3600 + mins * 60 + secs;
+
+  Duration::new(total_secs, nanos)
+}
+
+fn duration_to_string(duration: Duration) -> String
+{
+  let nanos = get_nanos(duration);
+  format!("{:02}:{:02}:{:02}.{}",
+    ((duration.as_secs() / 60) / 60),
+    ((duration.as_secs() / 60) % 60),
+    duration.as_secs() % 60,
+  nanos)
 }
 
 fn get_nanos(time: Duration) -> String

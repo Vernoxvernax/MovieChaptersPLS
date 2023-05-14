@@ -1,4 +1,4 @@
-use clap::{Arg, Command, ArgAction};
+use clap::{Arg, Command, ArgAction, arg};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -41,17 +41,29 @@ fn main () {
     )
     .arg(
       Arg::new("XML")
+      .long("xml")
       .short('x')
       .help("Output as XML instead of ffmetadata")
       .required(false)
       .action(ArgAction::SetTrue)
     )
     .arg(
-      Arg::new("merge")
+      arg!(-m --merge <id>)
+      .long("merge")
       .short('m')
       .help("Merge chapters for <id> until <id> into one chapter file (last one must have chapters). This option will also mind chapters that make up the entirety of the file.")
       .required(false)
       .action(ArgAction::Set)
+      .conflicts_with("only")
+      .num_args(2)
+    )
+    .arg(
+      arg!(-o --only <"00:00:00.0">)
+      .long("only")
+      .short('o')
+      .help("Output only chapters from <time> to <time> and normalize their start position to 0. For continuous chapterlists that don't have information about files (like DVDs).")
+      .action(ArgAction::Set)
+      .conflicts_with("merge")
       .num_args(2)
     )
   .get_matches();
@@ -62,6 +74,15 @@ fn main () {
       let merge: Vec<&String> = if let Some(ids) = matches.try_get_many::<String>("merge").unwrap()
       {
         ids.collect()
+      }
+      else
+      {
+        vec![]
+      };
+
+      let only: Vec<&String> = if let Some(time) = matches.try_get_many::<String>("only").unwrap()
+      {
+        time.collect()
       }
       else
       {
@@ -79,32 +100,33 @@ fn main () {
         return;
       }
 
-      let m2ts = serialize(file, merge);
+      let m2ts = serialize(file, merge, only);
       write_chapters(m2ts, xml);
     }
     _ => unreachable!(),
   }
 }
 
-fn write_chapters(files: Vec<M2ts>, xml: bool) {
-  fn str_to_time(start: String) -> String {
-    let start_str: Vec<&str> = start.split(':').collect();
-    let hours = start_str.get(0).unwrap().parse::<u64>().unwrap() * 60 * 60;
-    let minutes = start_str.get(1).unwrap().parse::<u64>().unwrap() * 60;
-    let start_str_2: Vec<&str> = start_str.get(2).unwrap().split('.').collect();
-    let seconds = start_str_2.get(0).unwrap().parse::<u64>().unwrap();
-    let mut ms_str = start_str_2.get(1).unwrap().to_owned().to_owned();
+fn str_to_time(start: String) -> String {
+  let start_str: Vec<&str> = start.split(':').collect();
+  let hours = start_str.get(0).unwrap().parse::<u64>().unwrap() * 60 * 60;
+  let minutes = start_str.get(1).unwrap().parse::<u64>().unwrap() * 60;
+  let start_str_2: Vec<&str> = start_str.get(2).unwrap().split('.').collect();
+  let seconds = start_str_2.get(0).unwrap().parse::<u64>().unwrap();
+  let mut ms_str = start_str_2.get(1).unwrap().to_owned().to_owned();
 
-    loop {
-      if ms_str.len() > 3 {
-        ms_str.pop();
-      } else {
-        break
-      }
+  loop {
+    if ms_str.len() > 3 {
+      ms_str.pop();
+    } else {
+      break
     }
-
-    format!("{}{}", hours + minutes + seconds, ms_str)
   }
+
+  format!("{}{}", hours + minutes + seconds, ms_str)
+}
+
+fn write_chapters(files: Vec<M2ts>, xml: bool) {
 
   if xml {
     for file in files {
