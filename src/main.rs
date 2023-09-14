@@ -42,8 +42,16 @@ fn main () {
     .arg(
       Arg::new("XML")
       .long("xml")
-      .short('x')
-      .help("Output as XML instead of ffmetadata")
+      .short('X')
+      .help("Output as XML chapters")
+      .required(false)
+      .action(ArgAction::SetTrue)
+    )
+    .arg(
+      Arg::new("FFmetadata")
+      .long("ffmetadata")
+      .short('F')
+      .help("Output as FFmetadata chapters")
       .required(false)
       .action(ArgAction::SetTrue)
     )
@@ -70,22 +78,22 @@ fn main () {
   match matches.args_present() {
     true => {
       let file = matches.get_one::<String>("00000.mpls").unwrap();
-      let xml: bool = *matches.get_one::<bool>("XML").unwrap();
-      let merge: Vec<&String> = if let Some(ids) = matches.try_get_many::<String>("merge").unwrap()
-      {
-        ids.collect()
+      let mut xml: bool = *matches.get_one::<bool>("XML").unwrap();
+      let ffmetadata: bool = *matches.get_one::<bool>("FFmetadata").unwrap();
+
+      if ! ffmetadata && ! xml {
+        xml = true;
       }
-      else
-      {
+
+      let merge: Vec<&String> = if let Some(ids) = matches.try_get_many::<String>("merge").unwrap() {
+        ids.collect()
+      } else {
         vec![]
       };
 
-      let only: Vec<&String> = if let Some(time) = matches.try_get_many::<String>("only").unwrap()
-      {
+      let only: Vec<&String> = if let Some(time) = matches.try_get_many::<String>("only").unwrap() {
         time.collect()
-      }
-      else
-      {
+      } else {
         vec![]
       };
 
@@ -94,14 +102,13 @@ fn main () {
         return;
       }
 
-      if ! Path::new(file).is_file()
-      {
+      if ! Path::new(file).is_file() {
         eprintln!("\"{file}\" does not exist.");
         return;
       }
 
       let m2ts = serialize(file, merge, only);
-      write_chapters(m2ts, xml);
+      write_chapters(m2ts, xml, ffmetadata);
     }
     _ => unreachable!(),
   }
@@ -126,10 +133,9 @@ fn str_to_time(start: String) -> String {
   format!("{}{}", hours + minutes + seconds, ms_str)
 }
 
-fn write_chapters(files: Vec<M2ts>, xml: bool) {
-
+fn write_chapters(files: Vec<M2ts>, xml: bool, ffmetadata: bool) {
   if xml {
-    for file in files {
+    for file in files.clone() {
       let mut rng = rand::thread_rng();
       let mut output: String = "<?xml version=\"1.0\"?>\n<!-- <!DOCTYPE Chapters SYSTEM \"matroskachapters.dtd\"> -->
 <Chapters>
@@ -152,7 +158,8 @@ fn write_chapters(files: Vec<M2ts>, xml: bool) {
       let mut file = File::create(file.path+".xml").unwrap();
       writeln!(&mut file, "{output}").unwrap();
     }
-  } else {
+  }
+  if ffmetadata {
     for file in files {
       let mut output: String = ";FFMETADATA1\n".to_string();
   
