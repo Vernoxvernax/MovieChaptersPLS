@@ -74,6 +74,14 @@ fn main () {
       .conflicts_with("merge")
       .num_args(2)
     )
+    .arg(
+      Arg::new("output-dir")
+      .long("output-dir")
+      .help("Specify the output directory.")
+      .required(false)
+      .action(ArgAction::Set)
+      .num_args(1)
+    )
   .get_matches();
   match matches.args_present() {
     true => {
@@ -107,8 +115,24 @@ fn main () {
         return;
       }
 
+      let output_dir = if let Some(dir) = matches.get_one::<String>("output-dir") {
+        Path::new(dir)
+      } else {
+        Path::new("./")
+      };
+
+      if !output_dir.exists() {
+        eprintln!("\"{}\" does not exist.", output_dir.to_str().unwrap());
+        return;
+      }
+
+      if !output_dir.is_dir() {
+        eprintln!("\"{}\" is not a directory.", output_dir.to_str().unwrap());
+        return;
+      }
+
       let m2ts = serialize(file, merge, only);
-      write_chapters(m2ts, xml, ffmetadata);
+      write_chapters(m2ts, xml, ffmetadata, output_dir.to_str().unwrap());
     }
     _ => unreachable!(),
   }
@@ -133,7 +157,13 @@ fn str_to_time(start: String) -> String {
   format!("{}{}", hours + minutes + seconds, ms_str)
 }
 
-fn write_chapters(files: Vec<M2ts>, xml: bool, ffmetadata: bool) {
+fn write_chapters(files: Vec<M2ts>, xml: bool, ffmetadata: bool, output_dir: &str) {
+  let output_path = if output_dir.ends_with("/") {
+    output_dir.to_string()
+  } else {
+    output_dir.to_owned()+"/"
+  };
+
   if xml {
     for file in files.clone() {
       let mut rng = rand::thread_rng();
@@ -155,7 +185,7 @@ fn write_chapters(files: Vec<M2ts>, xml: bool, ffmetadata: bool) {
 
       output += "  </EditionEntry>\n</Chapters>\n";
 
-      let mut file = File::create(file.path+".xml").unwrap();
+      let mut file = File::create(output_path.clone()+&file.path+".xml").unwrap();
       writeln!(&mut file, "{output}").unwrap();
     }
   }
@@ -170,7 +200,7 @@ fn write_chapters(files: Vec<M2ts>, xml: bool, ffmetadata: bool) {
         output = output + "\ntitle=" + &chapter.title;
       }
   
-      let mut file = File::create(file.path+".ff").unwrap();
+      let mut file = File::create(output_path.clone()+&file.path+".ff").unwrap();
       writeln!(&mut file, "{output}").unwrap();
     }
   }

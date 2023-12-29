@@ -30,6 +30,8 @@ ffmpeg -i 00000.m2ts -i 00000.m2ts.ff -map 0:v -map_metadata 1 -c copy 00000.mkv
   + This will only work if the MPLS file has one file ID with the specified chapters (aka.: incompatible with `--merge`)
   + Note: Maybe run `moviechapterspls` first, to extract the correct timestamps.
 
++ `--output-dir` to specify the output folder
+
 ___
 
 This script reads the binary data from your `.mpls` file and creates chapter files for every media file (e.g. `00000.m2ts`), that has at least one chapter assigned.
